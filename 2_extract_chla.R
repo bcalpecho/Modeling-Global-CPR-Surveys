@@ -152,7 +152,7 @@
   
   #set which surveys are use to extract chl-a
   survey_list <- c("auscpr", "natlantic", "npacific", "socpr") #can be modified to select the CPR surveys used for chl-a extraction
-  survey_list <- "auscpr"
+
   #8-day OC-CCI
   extract_chla(survey_list, "eightday") 
   #monthly OC-CCI
