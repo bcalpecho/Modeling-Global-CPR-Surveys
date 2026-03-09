@@ -13,7 +13,8 @@ For the chlorophyll-a data, the netcdf files of OC-CCI can be downloaded through
 * ```3_generate_completeDF.R``` finalizes the complete data frame comprised of zooplankton (relative abundance and assigned traits) and chlorophyll data.
 * ```4_model_globalCPR.R``` fit the model and generates the model predictions.
 * ```5_predict_globalCPR.R``` generate model predictions given the ensemble data.
-* ```6_assess_models.R``` assess the quality of fit of GLMs and produce the supplementary figures for model assessment.
+* ```6a_generate_ensemble.R``` generate a median ensemble of chlos projections from ten ESM models using 'hotrstuff' package.
+* ```6b_assess_models.R``` assess the quality of fit of GLMs and produce the supplementary figures for model assessment.
 * ```7_plot_modelsummary.R``` produce visual summary of selected models (Figure 3, 4, and 5).
 * ```0_wrangling_CPR.R``` additional functions for visualizing and preparing the zooplankton data. Includes creation of Figure 1 (Map of Global CPR).
 * ```0_wrangling_ensemble.R``` additional functions for visualizing and summarizing the ensemble data.
