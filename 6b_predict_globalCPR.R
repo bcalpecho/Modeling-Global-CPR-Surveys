@@ -13,7 +13,7 @@
 #basic aim: compute for change in zooplankton trophic group by 2100 relative to 2015
 
 ##setup
-  date <- "24022026"
+  date <- "09032026"
 
   #load libraries
     library(marginaleffects)
@@ -89,6 +89,9 @@
 
 #02 to compute for delta of trophic groups between 2015 and 2100
  
+  #latest projections - 25022026
+  date_projections <- "24022026"
+   
   compute_zoop_delta <- function(mdls){
     ssp_list <- list("ssp126","ssp245","ssp370","ssp585")
     
@@ -99,10 +102,10 @@
         
         TG <- names(mdls)[j]
         
-        if(file.exists(paste("Output/data/projections/",TG,"_",ssp_list[i],"_baseline_",date,".RData",sep=""))) {
-          projection_baseline <- readRDS(file=paste("Output/data/projections/",TG,"_",ssp_list[i],"_baseline_",date,".RData",sep=""))
+        if(file.exists(paste("Output/data/projections/",TG,"_",ssp_list[i],"_baseline_",date_projections,".RData",sep=""))) {
+          projection_baseline <- readRDS(file=paste("Output/data/projections/",TG,"_",ssp_list[i],"_baseline_",date_projections,".RData",sep=""))
           
-          projection_future <- readRDS(file=paste("Output/data/projections/",TG,"_",ssp_list[i],"_future_",date,".RData",sep=""))
+          projection_future <- readRDS(file=paste("Output/data/projections/",TG,"_",ssp_list[i],"_future_",date_projections,".RData",sep=""))
           
           
           projection_delta <- projection_baseline %>% 
@@ -123,7 +126,7 @@
           print(delta_summary)
           
         } else {
-          print(paste("File does not exist: Output/data/projections/",TG,"_",ssp_list[i],"_baseline_",date,".RData",sep=""))
+          print(paste("File does not exist: Output/data/projections/",TG,"_",ssp_list[i],"_baseline_",date_projections,".RData",sep=""))
         }
       }
     }
