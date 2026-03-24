@@ -12,19 +12,22 @@ Our findings are supported by open-access datasets. The data of Continuous Plank
 The ESA OC-CCI chl-a data can be accessed at https://www.oceancolour.org/thredds/ncss/grid/CCI_ALL-v6.0-8DAY/dataset.html.  
 The CMIP6 data are archived and distributed by the Earth System Grid Federation (ESGF; https://aims2.llnl.gov/search). 
 
-### Step-by-step preparation of data and modeling.
+### Scripts.
+The data preparation and analysis can be performed in two ways. 
+* Through a single script ```runCompleteAnalysis.R``` apart from the preparation of ensemble (Step 6a);
+* Through modular scripts (Step-by-step scripts 1 - 7). 
 
-* ```/data_input``` contains the CPR abundance tables, trait table, and combined data of the CPR Surveys.
-* ```1_generate_traits.R``` assign trophic groups to provided zooplankton taxon list based on trait tables.
-* ```2_extract_chla.R``` aggregates, extracts, and fill-up gaps of OC-CCI chlorophyll-a values.
-* ```3_generate_completeDF.R``` finalizes the complete data frame comprised of zooplankton (relative abundance and assigned traits) and chlorophyll data.
-* ```4_model_globalCPR.R``` fit the model and generates the model predictions.
-* ```5_predict_globalCPR.R``` generate model predictions given the ensemble data.
-* ```6a_generate_ensemble.R``` generate a median ensemble of chlos projections from ten CMIP6 ESM models.
-* ```6b_assess_models.R``` assess the quality of fit of GLMs and produce the supplementary figures for model assessment.
-* ```7_plot_modelsummary.R``` produce visual summary of selected models (Figure 3, 4, and 5).
-* ```0_wrangling_CPR.R``` additional functions for visualizing and preparing the zooplankton data. Includes creation of Figure 1 (Map of Global CPR).
-* ```0_wrangling_ensemble.R``` additional functions for visualizing and summarizing the ensemble data.
+  * ```data_input``` contains the CPR abundance tables, trait table, and combined data of the CPR Surveys.
+  * ```1_generate_traits.R``` assign trophic groups to provided zooplankton taxon list based on trait tables.
+  * ```2_extract_chla.R``` aggregates, extracts, and fill-up gaps of OC-CCI chlorophyll-a values.
+  * ```3_generate_completeDF.R``` finalizes the complete data frame comprised of zooplankton (relative abundance and assigned traits) and chlorophyll data.
+  * ```4_model_globalCPR.R``` fit the model and generates the model predictions.
+  * ```5_predict_globalCPR.R``` generate model predictions given the ensemble data.
+  * ```6a_generate_ensemble.R``` generate a median ensemble of chlos projections from ten CMIP6 ESM models.
+  * ```6b_assess_models.R``` assess the quality of fit of GLMs and produce the supplementary figures for model assessment.
+  * ```7_plot_modelsummary.R``` produce visual summary of selected models (Figures 3, 4, and 5).
+  * ```helper_CPR.R``` additional functions for visualizing and preparing the zooplankton data. Includes creation of Figure 1 (Map of Global CPR).
+  * ```helper_ensemble.R``` additional functions for visualizing and summarizing the ensemble data.
   
 ### Acknowledgements
 
