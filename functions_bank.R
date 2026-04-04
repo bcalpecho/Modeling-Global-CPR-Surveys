@@ -10,6 +10,8 @@
                 "ggpointdensity",
                 "marginaleffects",
                 "glmmTMB",
+                "MuMIn",
+                "GGally",
                 "DHARMa",
                 "gstat",
                 "sp",
@@ -31,12 +33,12 @@
     }
   )
 
-# 1_generate_traits :
+#### 1_generate_traits ####
   #1.1 Integrate Pata & Hunt (2023) assigned trait value to species list
   import_TG.PataHunt <- function(species.list){
     # Read the trait dataset
-    zoop.traits <- read_csv("Output/traits/TG_trait_subset_03-06-2025.csv")
-    copepod.traits <- read_csv("Output/traits/TG_copepods_combined_03-06-2025.csv")
+    zoop.traits <- read_csv("data_input/traits/TG_trait_subset_03-06-2025.csv")
+    copepod.traits <- read_csv("data_input/traits/TG_copepods_combined_03-06-2025.csv")
     
     # Select the relevant columns
     zoop.traits <- zoop.traits %>% 
@@ -57,7 +59,7 @@
       left_join(zoop.traits, by = c("taxonID", "scientificName", "class", "order", "family", "genus")) %>% 
       left_join(copepod.traits, by = c("taxonID", "scientificName", "class", "order", "family", "genus")) %>% 
       #rename column of traitValue to "Pata&Hunt.TG"
-      mutate(traitValue = ifelse(is.na(traitValue), "not determined", traitValue))
+      mutate(traitValue = ifelse(is.na(traitValue), "not_determined", traitValue))
     
     return(species.list)
   }
@@ -72,7 +74,7 @@
   }
   
   #1.3 check for duplicates and save finalized trait table
-  check_duplicate <- function(species_list){
+  detect_duplicateAssignedTrait <- function(species_list){
     
     #check which have duplicated 'traitValues'
     if(anyDuplicated(species.list$aphiaID) > 0){
@@ -83,15 +85,30 @@
     }else{ stop("Error in duplicate checking", call. = FALSE)}
     
     ##Save trait table
-    print(paste0("Trait table saved: Output/traits/TG_trait-table-",date,".csv"))
-    write_csv(species.list, paste("Output/traits/TG_trait-table-",date,".csv",sep=""))
+    write_csv(species.list, paste("output/df/TG_trait-table-",date,".csv",sep=""))
+    write_csv(species.list, paste("data_input/traits/TG_trait-table-",date,".csv",sep=""))
+    print(paste0("Trait table saved: TG_trait-table-",date,".csv"))
+  }
+  
+  #1.4 compare previous and current trait table 
+  compare_traitTables <- function(){
+    oldTraitTable <- read_csv(paste0("data_input/traits/TG_trait-table-08082d025.csv"))
+    newTraitTable <- read_csv(paste0("output/df/TG_trait-table-",date,".csv"))
+    
+    comparison_tibble <- oldTraitTable %>% 
+      select(c("aphiaID","scientificName","FG_latest")) %>% 
+      rename("TG_PreviousTraitTable" = "FG_latest") %>% 
+      full_join(newTraitTable %>% select(c("aphiaID","traitValue")), by = c("aphiaID")) %>% 
+      rename("TG_newTraitTable" = "traitValue")
+    
+    view(comparison_tibble)
   }
   
   ## See '1_generate_traits' script for full preparation of trait table.
   
-# 2_extract_chla : 
+#### 2_extract_chla #### 
   #2.1 aggregate raster file of OC-CCI (based on 'wrangle-netcdf-imos' script from 2024 UQ MME Lab R Workshop)
-  aggregate_ncdf <- function(survey_list, frequency) {
+  aggregate_ncdf <- function(survey_list, frequency, date) {
     
     ## Load data - read in list of netcdf files
     if(frequency == "eightday"){
@@ -110,7 +127,7 @@
     for(i in 1:length(survey_list)){
       #set study area for extraction 
       print(survey_list[i])
-      study_area <- read_csv(paste("data_input/CPR_on-process/cpr_",survey_list[i],"_metadata.csv",sep=""), col_names=TRUE) %>% 
+      study_area <- read_csv(paste("data_input/CPR/cpr_",survey_list[i],"_metadata.csv",sep=""), col_names=TRUE) %>% 
         dplyr::select(latitude, longitude) %>% 
         st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
       
@@ -151,13 +168,13 @@
         
         #save
         print(paste("file #:",j))
-        print(paste("Output/raster/",freq,"/",survey_list[i],"/",sub("*\\.nc4","",filenames[j]),"_",date,".grd",sep=""))
-        write_stars(dat_all2, paste("Output/raster/",freq,"/",survey_list[i],"/",sub("*\\.nc4","",filenames[j]),"_",date,".nc",sep=""))
-        #write_stars(dat_all2, 'Output/raster/')
+        print(paste("output/raster/",freq,"/",survey_list[i],"/",sub("*\\.nc4","",filenames[j]),"_",date,".grd",sep=""))
+        write_stars(dat_all2, paste("output/raster/",freq,"/",survey_list[i],"/",sub("*\\.nc4","",filenames[j]),"_",date,".nc",sep=""))
+        #write_stars(dat_all2, 'output/raster/')
         
       }
-      print(paste("Timelist saved: Output/raster/",freq,"/",survey_list[i],"/raster_time_list_",date,".RData",sep=""))
-      saveRDS(time.l, file=paste("Output/raster/",freq,"/",survey_list[i],"/raster_time_list_",date,".RData",sep=""))
+      print(paste("Timelist saved: output/raster/",freq,"/",survey_list[i],"/raster_time_list_",date,".RData",sep=""))
+      saveRDS(time.l, file=paste("output/raster/",freq,"/",survey_list[i],"/raster_time_list_",date,".RData",sep=""))
     }  
   }
 
@@ -168,20 +185,20 @@
       #read in cpr spatiotemporal coordinates
       if(frequency == "eightday"){
         print("OC-CCI frequency: 8-day")
-        rast_list <- list.files(path = paste("Output/raster/8DAY/", survey_list[i], sep=""), pattern = "*\\.grd$", full.names = TRUE)
+        rast_list <- list.files(path = paste("output/raster/8DAY/", survey_list[i], sep=""), pattern = "*\\.grd$", full.names = TRUE)
         #read time list for raster files
-        time.l <- read_rds(paste("Output/raster/8DAY/",survey_list[i],"/raster_time_list.RData",sep=""))
+        time.l <- read_rds(paste("output/raster/8DAY/",survey_list[i],"/raster_time_list.RData",sep=""))
         
       }else if(frequency == "monthly"){
         print("OC-CCI frequency: Monthly")
-        rast_list <- list.files(path = paste("Output/raster/MONTHLY/", survey_list[i],"/", sep=""), pattern = "*\\.grd$", full.names = TRUE)
+        rast_list <- list.files(path = paste("output/raster/MONTHLY/", survey_list[i],"/", sep=""), pattern = "*\\.grd$", full.names = TRUE)
         #read time list for raster files
-        time.l <- read_rds(paste("Output/raster/MONTHLY/",survey_list[i],"/raster_time_list.RData",sep=""))
+        time.l <- read_rds(paste("output/raster/MONTHLY/",survey_list[i],"/raster_time_list.RData",sep=""))
         
       }else{ stop("Wrong frequency indicated", call. = FALSE) }
       
       print(paste0("Survey: ",survey_list[i]))
-      cpr_coord_file <- file.path(paste("data_input/CPR_on-process/cpr_",survey_list[i],"_metadata.csv", sep=""))
+      cpr_coord_file <- file.path(paste("data_input/CPR/cpr_",survey_list[i],"_metadata.csv", sep=""))
       cpr_coords <- read_csv(cpr_coord_file, col_names=T) %>% 
         dplyr::select(sample_id, latitude, longitude, sampleTime_utc) %>% 
         st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
@@ -206,21 +223,20 @@
       }
       
       chla_df <- cbind(chla_df, cpr_coords %>% dplyr::select("sample_id", "sampleTime_utc"))
-      saveRDS(chla_df, file=paste("Output/data/chla/",survey_list[i],"/chla_",frequency,"_",date,".rds",sep=""))
-      print(paste("Extracted Chl-a Output: ","Output/data/chla/",survey_list[i],"/chla_",frequency,"_",date,".rds",sep=""))
+      saveRDS(chla_df, file=paste("output/chla/",survey_list[i],"/chla_",frequency,"_",date,".rds",sep=""))
+      print(paste("Extracted Chl-a Output: ","output/chla/",survey_list[i],"/chla_",frequency,"_",date,".rds",sep=""))
       
     }
   }
   
   #2.3 Fill-up gaps by monthly OC-CCI values
   
-  fill_up_gaps <- function(survey_list){
+  fill_up_gaps <- function(survey_list,date_chla){
     #setup for date and data input
-    date_chla <- "26032026"
-    
+
     for(i in 1:length(survey_list)){
       #extract from 8-day (to read output of previous function "extract_chla")
-      weekly_chla <- read_rds(paste("Output/data/chla/",survey_list[i],"/chla_eightday_",date_chla,".rds",sep="")) 
+      weekly_chla <- read_rds(paste("output/chla/",survey_list[i],"/chla_eightday_",date_chla,".rds",sep="")) 
       chla_df <- weekly_chla[1:57]
       chla_df$geometry = NULL
       
@@ -229,7 +245,7 @@
         rename(chla_eightday = value)
       
       #extract from monthly (to read output of previous function "extract_chla")
-      monthly_chla <- read_rds(paste("Output/data/chla/",survey_list[i],"/chla_monthly_",date_chla,".rds",sep="")) 
+      monthly_chla <- read_rds(paste("output/chla/",survey_list[i],"/chla_monthly_",date_chla,".rds",sep="")) 
       
       chla_df_m <- monthly_chla[1:9]
       chla_df_m$geometry = NULL
@@ -253,10 +269,10 @@
         mutate(chla = ifelse(is.na(chla_eightday), chla_monthly, chla_eightday))
       
       print(paste("Survey: ",survey_list[i],sep=""))
-      print(summary(is.na(chla_merged$chla_f))) 
+      #print(summary(is.na(chla_merged$chla_f))) 
       
-      print(paste0("Merged Chl-a output: Output/data/chla/",survey_list[i],"/chla_merged_",date,".rds"))
-      file <- paste("Output/data/chla/",survey_list[i],"/chla_merged_",date,".rds",sep="")
+      print(paste0("Merged Chl-a output: output/chla/",survey_list[i],"/chla_merged_",date,".rds"))
+      file <- paste("output/chla/",survey_list[i],"/chla_merged_",date,".rds",sep="")
       write_rds(chla_merged, file)
     }
   }
@@ -405,19 +421,19 @@
             data.frame() %>% 
             rename(sample_id = V1)
           
-          # print(paste("Output/data/sums/df_sums_",survey[i],"_",date, sep=""))
-          # write_csv(trait_sums, paste("Output/data/sums/df_sums_",survey[i],"_",date, sep=""))
+          # print(paste("output/data/sums/df_sums_",survey[i],"_",date, sep=""))
+          # write_csv(trait_sums, paste("output/data/sums/df_sums_",survey[i],"_",date, sep=""))
           print(paste("Saved file: ",survey,"/df_sums_",date,".csv", sep=""))
-          write_csv(trait_sums, paste("Output/data/",survey,"/df_sums_",date,".csv", sep=""))
+          write_csv(trait_sums, paste("output/df/",survey,"/df_sums_",date,".csv", sep=""))
       }
     }
   
   #3.2 Combining variables altogether into a dataframe
-  generate_df_perSurvey <- function(){
-    chl_date <- "15092025"
-    trait_date <- "21032026"
+  generate_df_perSurvey <- function(date){
+    chl_date <- date 
+    trait_date <- date
     
-    metadata_files <- list.files(path = "data_input/CPR_on-process/", pattern = "*\\metadata.csv", full.names = TRUE)
+    metadata_files <- list.files(path = "data_input/CPR/", pattern = "*\\metadata.csv", full.names = TRUE)
     
     filenames <- basename(metadata_files)
     
@@ -476,12 +492,12 @@
       
       #05 Chl-a
       ## Extracted chlorophyll matched by time and space
-      chl <- read_rds(paste("Output/data/",file_survey[i],"/chla_merged_",chl_date,".rds",sep="")) %>% select("sample_id","chla")
+      chl <- read_rds(paste("output/chla/",file_survey[i],"/chla_merged_",chl_date,".rds",sep="")) %>% select("sample_id","chla")
       df <- df %>% 
         left_join(chl, by = "sample_id")
       
       #06 Traits (TG)
-      traits <- read_csv(paste("Output/data/",file_survey[i],"/df_sums_",trait_date,".csv",sep=""), col_names =T, show_col_types =  F) 
+      traits <- read_csv(paste("output/df/",file_survey[i],"/df_sums_",trait_date,".csv",sep=""), col_names =T, show_col_types =  F) 
       df <- df %>% 
         left_join(traits, by = "sample_id")
       df$geometry = NULL
@@ -489,7 +505,7 @@
       #07 export df
       
       print(paste("Filename output: ",file_survey[i],"/df_complete_",date,".csv", sep=""))
-      write_rds(df, paste("Output/data/",file_survey[i],"/df_complete_",date,".rds",sep=""))
+      write_rds(df, paste("output/df/",file_survey[i],"/df_complete_",date,".rds",sep=""))
     }
   }
   
@@ -503,7 +519,7 @@
     # survey <- c("auscpr","natlantic","npacific","socpr")
     # file.list <- NA
     # for(i in 1:length(survey)){
-    #   file.list[i] <- list.files(path = paste("Output/data/",survey[i],"/",sep=""), pattern = "*\\complete_04082025.rds", full.names = TRUE)
+    #   file.list[i] <- list.files(path = paste("output/data/",survey[i],"/",sep=""), pattern = "*\\complete_04082025.rds", full.names = TRUE)
     # }
     # remove(i)
     
@@ -518,14 +534,14 @@
         print(paste("Update DF of ",survey," from version ",date_oldVersion," to ",date,sep=""))
         
         #read in previous df
-        df_prev <- paste("Output/data/",survey,"/",filenames,sep="")
+        df_prev <- paste("output/data/",survey,"/",filenames,sep="")
         df <- read_rds(df_prev)
         
         #remove previous traits
         df <- df %>% select(c(sample_id, longitude, latitude, sampleTime_utc, tow_no, tow_days, longhurst, chla))
         
         #load updated traits
-        traits_file <- paste("Output/data/",survey,"/df_sums_",date,".csv", sep="")
+        traits_file <- paste("output/data/",survey,"/df_sums_",date,".csv", sep="")
         traits <- read_csv(traits_file)
         
         #update df
@@ -533,7 +549,7 @@
           left_join(traits, by = "sample_id")
         
         #save updated df
-        file_output <- paste("Output/data/",survey,"/df_complete_",date,".rds",sep="")
+        file_output <- paste("output/data/",survey,"/df_complete_",date,".rds",sep="")
         print(file_output)
         write_rds(df_new, file_output)
       } 
@@ -549,7 +565,7 @@
     # survey <- c("auscpr","natlantic","npacific","socpr")
     # file.list <- NA
     # for(i in 1:length(survey)){
-    #   file.list[i] <- list.files(path = paste("Output/data/",survey[i],"/",sep=""), pattern = paste("*\\complete_",date_previousDF,".rds",sep=""), full.names = TRUE)
+    #   file.list[i] <- list.files(path = paste("output/data/",survey[i],"/",sep=""), pattern = paste("*\\complete_",date_previousDF,".rds",sep=""), full.names = TRUE)
     # }
     # remove(i)
     
@@ -564,7 +580,7 @@
         print(paste("Update DF of ",survey," from version ",date_oldVersion," to ",date,sep=""))
         
         #read in previous df
-        df_prev <- paste("Output/data/",survey,"/",filenames,sep="")
+        df_prev <- paste("output/data/",survey,"/",filenames,sep="")
         df <- read_rds(df_prev)
         
         #remove previous chla
@@ -572,7 +588,7 @@
         
         #load updated chla
         #CHECK the file name
-        chla_file <- paste("Output/data/",survey,"/chla_monthly_",date,".rds", sep="")
+        chla_file <- paste("output/data/",survey,"/chla_monthly_",date,".rds", sep="")
         chla <- read_rds(chla_file) %>% select(c("sample_id","chla"))
         
         #update df
@@ -581,7 +597,7 @@
         
         #save updated df
         #CHECK the file name
-        file_output <- paste("Output/data/",survey,"/df_complete_",date,"_monthlychla.rds",sep="")
+        file_output <- paste("output/data/",survey,"/df_complete_",date,"_monthlychla.rds",sep="")
         print(file_output)
         write_rds(df_new, file_output)
       } 
@@ -593,7 +609,7 @@
       survey_list <- c("auscpr","natlantic","npacific","socpr")
       for(i in 1:length(survey_list)){
         print(paste0("Reading dataframe of: ",survey_list[i]))
-        assign(paste(survey_list[i]), read_rds(paste("Output/data/",survey_list[i],"/df_complete_",date_newVersion,".rds",sep="")) %>%  
+        assign(paste(survey_list[i]), read_rds(paste("output/df/",survey_list[i],"/df_complete_",date_newVersion,".rds",sep="")) %>%  
                  mutate(survey = survey_list[i]) %>%  
                  select(c("survey","sample_id", "latitude", "longitude", "sampleTime_utc", "tow_no", "tow_days", "longhurst", "chla", "zoopTotal_sum","FF_sum","Omni_sum","Carni_sum","Cope_omni_sum","Cope_carni_sum", "Cal_omni_sum", "Cal_carni_sum","Cyc_omni_sum","Cyc_carni_sum")))
       }
@@ -639,17 +655,88 @@
           RCO_Cyc == 1 ~ ((RCO_Cyc*325075)+0.5)/325076,
           .default = RCO_Cyc)) 
       
-      #finalize df without Group
+      #finalize df for omnivores and carnivores
       df <- df %>% 
         #relocate(survey, .before= sample_id) %>% 
         relocate(chla_sqrt, .after=chla)
       
-      print(paste0("File saved: df_complete_",date_newVersion,".rds"))
-      write_rds(df, paste0("Output/data/global/df_complete_",date_newVersion,".rds"))   
-      write_rds(df, paste0("data_input/global/df_complete_",date_newVersion,".rds")) 
+      print(paste0("Dataframe for omnivores and carnivores saved: df_complete_",date_newVersion,".rds"))
+      write_rds(df, paste0("output/df/global_df_complete_",date_newVersion,".rds"))   
+      write_rds(df, paste0("data_input/global_df_complete_",date_newVersion,".rds")) #second copy for later steps 
+      
+      #finalize df for filter-feeders
+      
+      LH_modification <- c("ARCT", "BENG", "CNRY", "EAFR", "GFST", "GUIN", "MEDI", "NADR", "NASE", "NASW", "NATR", "NECS", "NPPF", "NWCS", "SARC")
+      df_modified <- df %>% filter(!(df$longhurst %in% LH_modification))
+      
+      print(paste0(c("Modification of dataframe for filter-feeders is the removal of the following Longhurst Provinces: ", LH_modification), collapse = " "))
+      print(paste0("Dataframe for filter-feeders saved: global_df_complete_Filter_",date_newVersion,".rds"))
+      write_rds(df_modified, paste0("output/df/global_df_complete_Filter_",date_newVersion,".rds"))   
+      write_rds(df_modified, paste0("data_input/global_df_complete_Filter_",date_newVersion,".rds")) #second copy for later steps 
       
     }
-
+    
+# 4_model_globalCPR :
+    
+    #4.1 to generate a summary of proportion contributed by fixed and random effects to the total variance of the model
+    summary_mdlVariance <- function(mdls){
+      tibble_variance_summary <- tibble(mdl = c("Filter_mdl_zib", "Omni_mdl_zib", "Carni_mdl_zib"),
+                                        FixedEffect_proportion = c(1,2,3),
+                                        RandomEffect_proportion = c(1,2,3),
+                                        TowWithinSurvey_proportion = c(1,2,3),
+                                        LonghurstProvinces_proportion = c(1,2,3))  
+      
+      for(i in 1:length(mdls)){
+        mdl_summary <- summary(mdls[[i]])
+        TG <- names(mdls[i])
+        if(TG == "Carni"){
+          if(exists("Carni_mdl_zib_R2") == FALSE){
+            mdl_Rsquare <- MuMIn::r.squaredGLMM(mdls[[i]])
+            print("missing")
+          }else{ mdl_Rsquare <- Carni_mdl_zib_R2}
+          
+        }else if(TG == "Omni"){
+          if(exists("Omni_mdl_zib_R2") == FALSE){
+            mdl_Rsquare <- MuMIn::r.squaredGLMM(mdls[[i]])
+            print("missing")
+          }else{ mdl_Rsquare <- Omni_mdl_zib_R2}
+          
+        }else if(TG == "Filter"){
+          if(exists("Filter_mdl_zib_R2") == FALSE){
+            mdl_Rsquare <- MuMIn::r.squaredGLMM(mdls[[i]])
+            print("missing")
+          }else{ mdl_Rsquare <- Filter_mdl_zib_R2}
+          
+        }else(stop ("Error in determining R^2: misidentified trophic group"))
+        
+        #(proportion of variation) overall contribution of fixed effects to mdl variance
+        var_FE <- mdl_Rsquare[1]
+        #(proportion of variation) overall contribution of REs to mdl variance
+        var_RE <- mdl_Rsquare[2] - mdl_Rsquare[1]
+        #Conditional R2
+        var_total <- mdl_Rsquare[2]
+        
+        #get variance
+        #Tow within Survey
+        var_survey <- mdl_summary$varcor$cond$`survey:tow_no`[1] #gets the variance 
+        #Longhurst Provinces
+        var_lh <- mdl_summary$varcor$cond$`longhurst`[1]      
+        
+        #contribution of each RE in relative terms
+        #Tow within Survey
+        rel_var_survey <- (var_survey)/(var_survey + var_lh) * var_RE
+        #Longhurst Provinces
+        rel_var_LH <- (var_lh)/(var_survey + var_lh) * var_RE
+        
+        tibble_variance_summary$FixedEffect_proportion[i] <- var_FE
+        tibble_variance_summary$RandomEffect_proportion[i] <- var_RE
+        tibble_variance_summary$TowWithinSurvey_proportion[i] <- rel_var_survey
+        tibble_variance_summary$FixedEffect_proportion[i] <- rel_var_LH
+      }        
+      view(tibble_variance_summary)
+    } 
+    
+    
 # 5_assess_models : 
   
   # Create a publication-ready theme (Adapted from 2025 UQ MME Lab Winter R Workshop)
@@ -677,21 +764,124 @@
       panel.grid = element_blank()
     )
 
-  # 5.1
-  dharma <- function(model) {
-    simulationOutput <- simulateResiduals(fittedModel = model, plot = FALSE)
+  #5.1 quantile-quantile plot to assess normality of residuals
+  plot_QQ <- function(mdl_list) {
     
-    # Wrap the base R plot call in a formula using wrap_elements
-    # This captures the plot so patchwork can treat it like an object
-    wrap_elements(panel = ~plotQQunif(
+    for(i in 1:length(mdl_list)){
+    
+    TG <- names(mdl_list[i])  
+    print(paste0("QQ plot in process for: ", TG))
+    simulationOutput <- simulateResiduals(fittedModel = mdl_list[[i]], plot = FALSE)
+    
+    qq_plot <- wrap_elements(panel = ~plotQQunif(
       simulationOutput, 
       testUniformity = FALSE, 
       testOutliers = FALSE, 
       testDispersion = FALSE
     ))
+    
+    if(TG == "Omni"){
+      Omni_qq <- qq_plot
+    }else if(TG == "Carni"){
+      Carni_qq <- qq_plot
+    }else if(TG == "Filter"){
+      Filter_qq <- qq_plot
+    }else{ stop("Error in generating QQ plot") }
+    # To save individual plots
+    # ggsave(paste0("output/plots/",TG,"_QQplot_",date,".png"), plot = qq_plot,
+    #        width = 8, height = 10, dpi = 300)
+    # print(paste0("QQ plot saved: ",TG,"_QQplot_",date,".png"))
+    
+    }
+    # To save merged QQ plots 
+    print(paste0("Plotting and combining the plots"))
+    QQ_patch <- Omni_qq + Carni_qq + Filter_qq +
+      plot_layout(design = "ABC") +
+      plot_annotation(tag_levels = "A", 
+                      theme = theme(plot.title = element_text(size = 16, face = "bold"),
+                                    plot.margin = margin(2,2,2,2)))
+    
+    ggsave(paste("output/plots/QQplot_",date,".png",sep=""), plot = QQ_patch,
+           width = 10, height = 4, dpi = 600)
+    print(paste0("Plot saved: QQplot_",date,".png"))
+    
   }
   
-  #5.2
+  #5.2 mean variance plot to assess homogeneity of variance
+  plot_meanVariance <- function(mdl_list){
+    date_newVersion <- date
+    df <- read_rds(paste0("data_input/global_df_complete_",date_newVersion,".rds"))
+    df_filter <- read_rds(paste0("data_input/global_df_complete_Filter_",date_newVersion,".rds"))
+    
+    for(i in 1:length(mdl_list)){
+      TG <- names(mdl_list[i])  
+      print(paste0("Model in process: ",TG))
+      
+      if(TG == "Omni"){
+        df_Omni_noNA <- df %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(ROC_SVT_zib)) %>% filter(!is.na(tow_days))
+        Omni_meanVariance <- ggplot(df_Omni_noNA) + aes(fitted(Omni_mdl_zib), resid(Omni_mdl_zib, type = "pearson")) +
+          geom_hex(bins = 80) + geom_smooth(method = "loess") + pub_theme + theme(legend.position = c(.9, .8)) +
+          scale_fill_viridis(begin = 0, end = .9, option = "C", limit = range(c(1,1200))) +
+          theme(plot.title = element_text(hjust = 0.5), ) +
+          labs(fill = "Frequency") + ylab("Residual") + xlab("Fitted Value")
+        
+      }else if(TG == "Carni"){
+        df_Carni_noNA <- df %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(RCO_SVT_zib)) %>% filter(!is.na(tow_days))
+        Carni_meanVariance <- ggplot(df_Carni_noNA) + aes(fitted(Carni_mdl_zib), resid(Carni_mdl_zib, type = "pearson")) +
+          geom_hex(bins = 80) + geom_smooth(method = "loess") + pub_theme + theme(legend.position = c(.9, .8)) +
+          scale_fill_viridis(begin = 0, end = .9, option = "C", limit = range(c(1,1200))) +
+          theme(plot.title = element_text(hjust = 0.5), ) +
+          labs(fill = "Frequency") + ylab("Residual") + xlab("Fitted Value")
+        
+      }else if(TG == "Filter"){
+        df_FF_noNA <- df_filter %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(RFF_SVT_zib)) %>% filter(!is.na(tow_days))
+        Filter_meanVariance <- ggplot(df_FF_noNA) + aes(fitted(Filter_mdl_zib), resid(Filter_mdl_zib, type = "pearson")) +
+          geom_hex(bins = 80) + geom_smooth(method = "loess") + pub_theme + theme(legend.position = c(.9, .8)) +
+          scale_fill_viridis(begin = 0, end = .9, option = "C", limit = range(c(1,1200))) +
+          theme(plot.title = element_text(hjust = 0.5), ) +
+          labs(fill = "Frequency") + ylab("Residual") + xlab("Fitted Value")
+        
+      }else{stop("Error in designated trophic group: possible misidentified model")}
+    }
+    
+    ## Residual plot
+    # #to save individual plots
+    # ggsave(paste("output/illustrations/Filter_meanVariance_",date,".png",sep=""), plot = Filter_meanVariance,
+    #        width = 9, height = 6, dpi = 300)
+    #
+    # ggsave(paste("output/illustrations/Omni_meanVariance_",date,".png",sep=""), plot = Omni_meanVariance,
+    #        width = 9, height = 6, dpi = 300)
+    #
+    # ggsave(paste("output/illustrations/Carni_meanVariance_",date,".png",sep=""), plot = Carni_meanVariance,
+    #        width = 9, height = 6, dpi = 300)
+    # #
+    
+    # design <- "
+    #             A
+    #             B
+    #             C
+    #           "
+    # 
+    # (meanVariance_patch <- Filter_meanVariance + Omni_meanVariance + Carni_meanVariance +
+    #    plot_layout(design = design) +
+    #    plot_annotation(
+    #      tag_levels = "A",
+    #      theme = theme(plot.title = element_text(size = 16, face = "bold"))
+    #    )
+    # )
+    
+    print(paste0("Plotting and combining the plots"))
+    meanVariance_patch <- Omni_meanVariance / Carni_meanVariance / Filter_meanVariance +
+      plot_annotation(tag_levels = "A", 
+                      theme = theme(plot.title = element_text(size = 16, face = "bold"),
+                                    plot.margin = margin(10,10,10,10)))
+    
+    ggsave(paste("output/plots/meanVariance_",date,".png",sep=""), plot = meanVariance_patch,
+           width = 10, height = 3, dpi = 300)
+    print(paste0("Plot saved: meanVariance_",date,".png"))
+  }
+  
+  #5.3 to plot the intercepts of Longhurst Provinces
   plot_Longhurst <- function(model_list){
     for(i in 1:length(model_list)){
       REs <- ranef(model_list[[i]], condVar = TRUE) #Update the model input
@@ -722,7 +912,7 @@
                           ymax=Intercepts+sd.interc),
                       width = 0,color="black") +
         geom_point(color = "black", size = 2) +
-        guides(size=FALSE,shape=FALSE) + 
+        guides(size="none",shape="none") + 
         theme(axis.text.x=element_text(size=10), 
               axis.title.x=element_text(size=13),
               panel.grid.minor.x = element_blank(),
@@ -732,13 +922,13 @@
       
       #annotate("text", y = -2.3, x = 28, label = "(D)", size = 5)
       
-      ggsave(paste0("Output/predictions/global/randomEffects/",TG,"_Longhurst-",date,".png"), plot = re_lh_plot,
+      ggsave(paste0("output/plots/",TG,"_Longhurst-",date,".png"), plot = re_lh_plot,
              width = 5, height = 6, dpi = 300)
       print(paste0("File saved: ",TG,"_Longhurst-",date,".png"))
     }
   }
   
-  #5.3
+  #5.4 to plot point density plots of Tow within Survey slope and intercept
   ### Tow slope and intercept ###
   
   plot_TowSlopeAndIntercept <- function(model_list){
@@ -762,28 +952,36 @@
         scale_colour_viridis_c() +
         labs(fill = "Density", x = "Tow within Survey Intercept", y = "Tow within Survey Slope") +
         theme(
-          axis.text = element_text(size = 14)    # Adjust the size for axis numbers/text
-        )
+          axis.text = element_text(size = 14),    # Adjust the size for axis numbers/text
+          legend.position = c(0.9,0.9)
+          ) 
       
       #update file name
-      ggsave(paste0("Output/predictions/global/randomEffects/",TG,"_Tow-Survey-",date,".png"), plot = re_tow_plot_point_density,
+      ggsave(paste0("output/plots/",TG,"_Tow-Survey-",date,".png"), plot = re_tow_plot_point_density,
              width = 7, height = 8, dpi = 300)
       print(paste0("File saved: ",TG,"_Tow-Survey-",date,".png"))
     }  
   }
   
-  #5.4 
+  #5.5 to plot residuals of models with and without the random effects
   plot_residuals <- function(model_list){
+    date_newVersion <- date
+    df <- read_rds(paste0("data_input/global_df_complete_",date_newVersion,".rds"))
+    df_filter <- read_rds(paste0("data_input/global_df_complete_Filter_",date_newVersion,".rds"))
+    
     for(i in 1:length(model_list)){
       vc <- VarCorr(model_list[[i]])
       TG <- names(model_list[i])
       print(TG) 
       
-      ifelse(TG == "Filter", 
-             df_noNA <- df_modified %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(RFF_SVT_zib)) %>% filter(!is.na(tow_days)),
-             ifelse(TG == "Carni", 
-                    df_noNA <- df %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(RCO_SVT_zib)) %>% filter(!is.na(tow_days)), 
-                    df_noNA <- df %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(ROC_SVT_zib)) %>% filter(!is.na(tow_days))))
+      if(TG == "Filter"){
+        df_noNA <- df_filter %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(RFF_SVT_zib)) %>% filter(!is.na(tow_days))
+      }else if(TG == "Carni"){ 
+        df_noNA <- df %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(RCO_SVT_zib)) %>% filter(!is.na(tow_days))
+      }else if(TG == "Omni"){ 
+        df_noNA <- df %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(ROC_SVT_zib)) %>% filter(!is.na(tow_days))
+      }else{stop("Error in reading dataframe")}
+      
       #print(summary(df_noNA))
       
       # Data format for variograms
@@ -812,22 +1010,25 @@
         #annotate("text", x = -190, y = 90, label = "(b)", size = 9) +
         guides(colour = "none", size = guide_legend(title = "Magnitude"))
       
-      ggsave(paste("Output/map/residuals_map/",TG,"_zoop_withRandom_",date,".png",sep=""), plot = residuals_withRandom,
-             width = 9, height = 6, dpi = 300)
-      print(paste("File saved (residual map with random effects): Output/map/residuals_map/",TG,"_zoop_withRandom_",date,".png",sep=""))
+      #to save individual plot
+      # ggsave(paste("output/plots/",TG,"_residualMap_withRandom_",date,".png",sep=""), plot = residuals_withRandom,
+      #        width = 9, height = 6, dpi = 300)
+      # print(paste("File saved (residual map with random effects): output/plots/",TG,"_residualMap_withRandom_",date,".png",sep=""))
       
       # Model without random effects 
-      ifelse(TG == "Filter", 
+      if(TG == "Filter"){ 
              Mdl_noRandom <- glmmTMB(RFF_SVT_zib ~ chla_sqrt + survey, 
                                      ziformula = ~1,
-                                     data = df_noNA, family = beta_family(link = "logit")),
-             ifelse(TG == "Carni", 
+                                     data = df_noNA, family = beta_family(link = "logit"))
+      }else if(TG == "Carni"){ 
                     Mdl_noRandom <- glmmTMB(RCO_SVT_zib ~ chla_sqrt + survey, 
                                             ziformula = ~1,
-                                            data = df_noNA, family = beta_family(link = "logit")), 
+                                            data = df_noNA, family = beta_family(link = "logit"))
+      }else if(TG == "Omni"){
                     Mdl_noRandom <- glmmTMB(ROC_SVT_zib ~ chla_sqrt + survey, 
                                             ziformula = ~1,
-                                            data = df_noNA, family = beta_family(link = "logit"))))
+                                            data = df_noNA, family = beta_family(link = "logit"))
+      }else{ stop("Error in generating model without random effects")}
       
       autocorData$resids <- resid(Mdl_noRandom)
       autocorData$signres<- sign(autocorData$resids)
@@ -844,10 +1045,10 @@
         #annotate("text", x = -190, y = 90, label = "(a)", size = 9) +
         guides(colour = "none", size = guide_legend(title = "Magnitude"))
       
-      #export plot of residuals without random effects
-      ggsave(paste("Output/map/residuals_map/",TG,"_zoop_noRandom_",date,".png",sep=""), plot = residuals_noRandom,
-             width = 9, height = 6, dpi = 300)
-      print(paste("File saved (residual map without random effects): Output/map/residuals_map/",TG,"_zoop_noRandom_",date,".png",sep=""))
+      # #save plot of residuals without random effects
+      # ggsave(paste("output/plots/",TG,"_residualMap_noRandom_",date,".png",sep=""), plot = residuals_noRandom,
+      #        width = 9, height = 6, dpi = 300)
+      # print(paste("File saved (residual map without random effects): output/plots/",TG,"_residualMap_noRandom_",date,".png",sep=""))
       
       #combine
       design <- "
@@ -863,9 +1064,10 @@
            theme = theme(plot.title = element_text(size = 16, face = "bold"))
          )
       )   
-      ggsave(paste("Output/map/residuals_map/residualMap_",TG,"_",date,".png",sep=""), plot = residualMap,
+      ggsave(paste("output/plots/residualMap_",TG,"_",date,".png",sep=""), plot = residualMap,
              width = 8, height = 10, dpi = 300)
       print(paste("File saved: residualMap_",TG,"_",date,".png",sep=""))
+      print("Map of residuals for model (A) with and (B) without random effects")
       
     }
   }
@@ -876,21 +1078,22 @@
   
   predict_zoop_delta <- function(ensemble, mdls){
     
-    #6.1.1 load ensemble
+    #1.1 load ensemble
     ens_selected <- read_stars(ensemble, quiet = TRUE, proxy = TRUE) %>% setNames("chlos")
     ens_snapshot_baseline <- ens_selected[,,,1] #2015:1 :: 2100:86
     ens_snapshot_future <- ens_selected[,,,86] 
-    #6.1.2 identify ssp scenario
+    #1.2 identify ssp scenario
     ssp_scenario <- str_extract(basename(ensemble), "ssp\\d{3}")
-    #6.1.3 list baseline and future snapshot under ssp scenario
+    #1.3 list baseline and future snapshot under ssp scenario
     esm_list <- list(ens_snapshot_baseline, ens_snapshot_future)
     names(esm_list) <- c("baseline","future")
     
-    #6.1.4 perform iteration of predicting outcomes per zooplankton trophic group    
+    print(paste0("Generating predictions under ",ssp_scenario," scenario"))
+    #1.4 perform iteration of predicting outcomes per zooplankton trophic group    
     for(i in 1:length(mdls)){
       #identify trophic group
       TG <- names(mdls)[i]
-      #6.1.5 perform iteration of predicting outcomes for baseline and future snapshot 
+      #1.5 perform iteration of predicting outcomes for baseline and future snapshot 
       for(j in 1:length(esm_list)){
         esm_level <- names(esm_list)[j]
         #1.6 convert chlos (kg/m^3) to chla_sqrt (sqrt (mg/m^3) )
@@ -903,15 +1106,15 @@
         esm_df <- esm_df %>% select(c(chla_sqrt,x,y))
         ##
         
-        #6.1.7 predict outcomes of models given the Chl-a projections
+        #1.7 predict outcomes of models given the Chl-a projections
         esm_pred <- predictions(mdls[[i]], newdata = datagrid(chla_sqrt = esm_df$chla_sqrt), re.form = NA)
         
-        esm_pred_merged <- esm_pred %>%
-          left_join(esm_df, by = c("chla_sqrt"))
+        esm_pred_merged <- esm_df %>%
+          left_join(esm_pred %>% select("chla_sqrt","estimate"), by = c("chla_sqrt"))
         
-        #6.1.8 Save predictions in an R data output 
-        saveRDS(esm_df, file=paste("Output/data/projections/",TG,"_",ssp_scenario,"_",esm_level,"_",date,".RData",sep=""))
-        print(paste("Output/data/projections/",TG,"_",ssp_scenario,"_",esm_level,"_",date,".RData",sep=""))
+        #1.8 Save predictions in an R data output 
+        saveRDS(esm_pred_merged, file=paste("Output/projections/",TG,"_",ssp_scenario,"_",esm_level,"_",date,".RData",sep=""))
+        print(paste("Output saved: projections/",TG,"_",ssp_scenario,"_",esm_level,"_",date,".RData",sep=""))
       }
     }
   }
@@ -921,7 +1124,7 @@
   
   compute_zoop_delta <- function(mdls){
     #stable projections - 24 & 25022026
-    date_projections <- "26032026"
+    date_projections <- date
     
     ssp_list <- list("ssp126","ssp245","ssp370","ssp585")
     
@@ -932,10 +1135,10 @@
         
         TG <- names(mdls)[j]
         
-        if(file.exists(paste("Output/data/projections/",TG,"_",ssp_list[i],"_baseline_",date_projections,".RData",sep=""))) {
-          projection_baseline <- readRDS(file=paste("Output/data/projections/",TG,"_",ssp_list[i],"_baseline_",date_projections,".RData",sep=""))
+        if(file.exists(paste("output/projections/",TG,"_",ssp_list[i],"_baseline_",date_projections,".RData",sep=""))) {
+          projection_baseline <- readRDS(file=paste("output/projections/",TG,"_",ssp_list[i],"_baseline_",date_projections,".RData",sep=""))
           
-          projection_future <- readRDS(file=paste("Output/data/projections/",TG,"_",ssp_list[i],"_future_",date_projections,".RData",sep=""))
+          projection_future <- readRDS(file=paste("output/projections/",TG,"_",ssp_list[i],"_future_",date_projections,".RData",sep=""))
           
           
           projection_delta <- projection_baseline %>% 
@@ -956,7 +1159,7 @@
           print(delta_summary)
           
         } else {
-          print(paste("File does not exist: Output/data/projections/",TG,"_",ssp_list[i],"_baseline_",date_projections,".RData",sep=""))
+          print(paste("File does not exist: output/projections/",TG,"_",ssp_list[i],"_baseline_",date_projections,".RData",sep=""))
         }
       }
     }
@@ -972,7 +1175,7 @@
       
       for(j in 1:length(ssp_list)){
         
-        projection_future <- readRDS(file=paste("Output/data/projections/",TG,"_",ssp_list[j],"_future_",date,".RData",sep=""))
+        projection_future <- readRDS(file=paste("output/projections/",TG,"_",ssp_list[j],"_future_",date,".RData",sep=""))
         
         TG_summary <- projection_future %>% 
           summarise(mean = mean(estimate, na.rm =T), 
@@ -1000,7 +1203,7 @@
       
       for(j in 1:length(ssp_list)){
         
-        projection_baseline <- readRDS(file=paste("Output/data/projections/",TG,"_",ssp_list[j],"_baseline_",date,".RData",sep=""))
+        projection_baseline <- readRDS(file=paste("output/projections/",TG,"_",ssp_list[j],"_baseline_",date,".RData",sep=""))
         
         TG_summary <- projection_baseline %>% 
           summarise(mean = mean(estimate, na.rm =T), 
@@ -1022,36 +1225,12 @@
 
     plot_model_summary_omnivores <- function(date){
       
-      # Create a publication-ready theme (Adapted from 2025 UQ MME Lab Winter R Workshop)
-      pub_theme <- theme_classic(base_size = 10, base_family = "sans") + # Family including Arial, Helvetica, Futura, Verdana, and Calibri
-        theme(
-          # Axis styling
-          axis.title = element_text(size = 14, face = "bold"),
-          axis.text = element_text(size = 12, colour = "black"),
-          axis.line = element_line(colour = "black", linewidth = 0.5),
-          axis.ticks = element_line(colour = "black", linewidth = 0.5),
-          
-          # Legend styling
-          legend.title = element_text(size = 10, face = "bold"),
-          legend.text = element_text(size = 8),
-          legend.position = "inside",
-          #legend.position.inside = c(0.85, 0.25),
-          legend.background = element_rect(fill = "white", colour = "black", linewidth = 0.5),
-          legend.margin = margin(2, 2, 2, 2),
-          
-          # Panel styling
-          panel.background = element_rect(fill = "white"),
-          plot.background = element_rect(fill = "white"),
-          
-          # Remove grid lines for cleaner look
-          panel.grid = element_blank()
-        )
-      
-      #01 read in model
-      load("Output/previousModels/revision/fMdl_omni.RData") 
-      
+      #01 read in df and model
+      # df <- read_csv(paste0("data_input/global_df_complete_",date,".rds"))
+      df_noNA <- df %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(ROC_SVT_zib)) %>% filter(!is.na(tow_days))
+
       #FIGURE 3
-      print("Figure 3 (omnivores) in preparation: predictions")
+      print("Visual summary of glm for omnivorous zooplankton in preparation")
       #02 plot model predictions by (A) chl-a and (B) CPR Survey
       #Omnivores proportion vs. Chl-a
       pop_preds_omni_chla <- predictions(Omni_mdl_zib, 
@@ -1162,8 +1341,8 @@
             theme = theme(plot.title = element_text(size = 12, face = "bold"))
           )
       )    
-      print(paste("Saved plot: Output/illustrations/Omni_",date,".png",sep=""))
-      ggsave(paste("Output/illustrations/Omni_",date,".png",sep=""), plot = final_patch,
+      print(paste("Saved plot: output/plots/Omni_",date,".png",sep=""))
+      ggsave(paste("output/plots/Omni_",date,".png",sep=""), plot = final_patch,
              width = 8, height = 10, dpi = 300)
       
     }
@@ -1171,35 +1350,14 @@
     
     plot_model_summary_carnivores <- function(date){
       # Create a publication-ready theme (Adapted from 2025 UQ MME Lab Winter R Workshop)
-      pub_theme <- theme_classic(base_size = 10, base_family = "sans") + # Family including Arial, Helvetica, Futura, Verdana, and Calibri
-        theme(
-          # Axis styling
-          axis.title = element_text(size = 14, face = "bold"),
-          axis.text = element_text(size = 12, colour = "black"),
-          axis.line = element_line(colour = "black", linewidth = 0.5),
-          axis.ticks = element_line(colour = "black", linewidth = 0.5),
-          
-          # Legend styling
-          legend.title = element_text(size = 10, face = "bold"),
-          legend.text = element_text(size = 8),
-          legend.position = "inside",
-          #legend.position.inside = c(0.85, 0.25),
-          legend.background = element_rect(fill = "white", colour = "black", linewidth = 0.5),
-          legend.margin = margin(2, 2, 2, 2),
-          
-          # Panel styling
-          panel.background = element_rect(fill = "white"),
-          plot.background = element_rect(fill = "white"),
-          
-          # Remove grid lines for cleaner look
-          panel.grid = element_blank()
-        )
-      
-      #01 read in model
-      load("Output/previousModels/revision/fMdl_carni.RData") 
+      # #01 read in model
+      # load("output/previousModels/revision/fMdl_carni.RData") 
+      # df <- read_csv(paste0("data_input/global_df_complete_",date,".rds"))
+      df_noNA <- df %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(RCO_SVT_zib)) %>% filter(!is.na(tow_days))
+
       
       #FIGURE 4
-      print("Figure 4 (carnivores) in preparation: predicting outcomes")
+      print("Visual summary of glm for carnivorous zooplankton in preparation")
       #B. Carnivores
       #Carnivores proportion vs. Chl-a
       
@@ -1311,19 +1469,21 @@
           )
       )    
       
-      print(paste("Plot saved: Output/illustrations/Carni_",date,".png",sep=""))
-      ggsave(paste("Output/illustrations/Carni_",date,".png",sep=""), plot = final_patch,
+      print(paste("Plot saved: output/plots/Carni_",date,".png",sep=""))
+      ggsave(paste("output/plots/Carni_",date,".png",sep=""), plot = final_patch,
              width = 8, height = 10, dpi = 300)
       
     }
     
     
     plot_model_summary_filterfeeders <- function(date){
-      #01 read in model
-      load("Output/previousModels/revision/fMdl_filterfeeder.RData") 
-      
+      # #01 read in model
+      # load("output/previousModels/revision/fMdl_filterfeeder.RData") 
+      # df_filter <- read_csv(paste0("data_input/global_df_complete_Filter_",date,".rds"))
+      df_noNA <- df_filter %>% filter(!is.na(chla_sqrt)) %>% filter(!is.na(RFF_SVT_zib)) %>% filter(!is.na(tow_days))
+
       #FIGURE 5
-      print("Figure 5 (gelatinous filter-feeders) in preparation: predicting outcomes")
+      print("Visual summary of glm for gelatinous filter-feeders in preparation")
       #C. Filter-feeders
       #Filter-feeders proportion vs. Chl-a
       pop_preds_FF_chla <- predictions(Filter_mdl_zib, 
@@ -1331,7 +1491,7 @@
                                        re.form = NA) # Zeros out random effects
       
       ff_plot_chla <- ggplot(data = pop_preds_FF_chla) + pub_theme + 
-        geom_point(data = df, 
+        geom_point(data = df_noNA, 
                    aes(x = chla_sqrt, y = RFF_SVT_zib), alpha = 0.1) +
         geom_ribbon(aes(x = chla_sqrt, y = estimate, 
                         ymin = conf.low, ymax = conf.high), alpha = 0.3, colour = "blue", linetype=2) + 
@@ -1440,8 +1600,8 @@
           )
       )    
       
-      print(paste("Plot saved: Output/illustrations/Filter_",date,".png",sep=""))
-      ggsave(paste("Output/illustrations/Filter_",date,".png",sep=""), plot = final_patch,
+      print(paste("Plot saved: output/plots/Filter_",date,".png",sep=""))
+      ggsave(paste("output/plots/Filter_",date,".png",sep=""), plot = final_patch,
              width = 8, height = 10, dpi = 300)
       
     }  
