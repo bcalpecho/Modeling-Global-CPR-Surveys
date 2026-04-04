@@ -14,8 +14,8 @@ The CMIP6 data are archived and distributed by the Earth System Grid Federation 
 
 ### Scripts.
 The data preparation and analysis can be performed in two ways: 
-* Through a single script ```runCompleteAnalysis.R```, apart from the preparation of ensemble (Step 6a).
-* Through modular scripts (Step-by-step scripts 1 - 7).
+* Through a single script ```runCompleteAnalysis.R```.
+* Through modular scripts in ```scripts``` folder.
 
   * ```data_input``` contains the CPR abundance tables, trait table, and combined data of the CPR Surveys.
   * ```1_generate_traits.R``` assign trophic groups to provided zooplankton taxon list based on trait tables.
