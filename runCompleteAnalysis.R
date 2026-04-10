@@ -29,6 +29,10 @@
     mba_rawfile <- read_csv("data_input/CPR/CPR_raw_data/NPacifc_Atlantic_CPR_1958_2021.csv")
       #above dataset is not uploaded in the repository, but earlier versions are available online.
     preprocess_mba_cpr(mba_rawfile)
+  
+  #to map the global cpr (Output: Figure 1)
+    cpr_meta <- list.files(path = "data_input/CPR/", pattern = "*\\metadata.csv", full.names = TRUE)
+    map_globalcpr(cpr_meta)
       
 ########## 1 Generate trait table ##########
 

@@ -17,7 +17,9 @@
                 "sp",
                 "sf",
                 "viridis",
-                "gridGraphics")
+                "gridGraphics",
+                "rnaturalearth",
+                "tmap")
   
   # Function to download the packages if necessary. Otherwise, these are loaded.
   package.check <- lapply(
@@ -32,7 +34,290 @@
       }
     }
   )
-
+  
+########################################### Pre-process CPR files ###############################################
+  
+  #0.1 pre-processing CPR raw files 
+  #pre-process Australian CPR survey
+  #load auscpr raw csv file (based on latest available df as of 27 March 2026)
+  
+  preprocess_auscpr <- function(auscpr_rawfile){
+    auscpr_rawfile <- auscpr_rawfile %>% 
+      mutate(survey = "Australian CPR") 
+    #list metadata content
+    auscpr_meta <- c("survey","TripCode","Sample_ID","Region","Latitude","Longitude","SampleTime_UTC","SampleTime_Local","Year_Local","Month_Local","Day_Local","Time_Local24hr","SampleVolume_m3")
+    #subset metadata
+    df_metadata <- auscpr_rawfile %>% 
+      select(all_of(auscpr_meta)) %>% 
+      rename(c("sample_id" = "Sample_ID", "latitude" = "Latitude", "longitude" = "Longitude", "sampleTime_UTC" = "SampleTime_UTC"))
+    
+    #save metadata file
+    metadata_filename <- "cpr_auscpr_metadata.csv"
+    write_csv(df_metadata, paste0("data_input/CPR/",metadata_filename))
+    print(paste0("Metadata dataframe saved: ", metadata_filename))
+    
+    df_zoop <- auscpr_rawfile %>% 
+      select(c("Sample_ID",!all_of(auscpr_meta))) %>% 
+      select(-c("SatSST_degC","PCI","SatChlaSurf_mgm3","BiomassIndex_mgm3")) %>% 
+      rename("sample_id" = "Sample_ID")
+    
+    #load taxon list
+    auscpr_taxonlist <- read_csv("data_input/CPR/CPR_raw_data/auscpr_taxonlist.csv", show_col_types = F)
+    count_recognizedAphiaID <- sum(names(df_zoop) %in% auscpr_taxonlist$taxon_auscpr, na.rm = T)
+    print(paste0("Taxon with AphiaID: ", count_recognizedAphiaID, " out of ", (length(names(df_zoop)) - 1)))
+    
+    #remove unidentified / general taxa
+    unidentified_taxa <- c("Egg","Egg mass","Fish egg","Fish j","Fish larvae","Fish scales","Nauplii zooplankton","Trochophore larvae","Unid invert larvae") #auscpr-specific list
+    df_noUnid <- df_zoop %>% select(!any_of(unidentified_taxa)) 
+    
+    #rename columns from taxonomic name to AphiaID 
+    #prior step: remove unidentified / general taxa from taxon list and keep only taxon presently identified in auscpr abundance raw file
+    auscpr_taxonlist <- auscpr_taxonlist %>% 
+      filter(., !(taxon_auscpr %in% unidentified_taxa)) %>% 
+      filter(., (taxon_auscpr %in% names(df_noUnid)))
+    #to select columns with matched AphiaID
+    df_withmatch <- df_noUnid %>% 
+      select(-c("sample_id")) %>% 
+      select(match(names(df_noUnid), auscpr_taxonlist$taxon_auscpr, nomatch = 0))
+    #to rename based on the match
+    names(df_withmatch)[match(names(df_withmatch),auscpr_taxonlist$taxon_auscpr)] <- auscpr_taxonlist$aphiaID
+    
+    #combine columns of the same name
+    auscpr_long <- df_withmatch %>%
+      add_column("sample_id" = df_noUnid$sample_id, .name_repair = "minimal") %>%
+      pivot_longer(cols = !sample_id, names_to = "AphiaID", values_to = "value")
+    
+    #sum up abundance per taxon
+    DF_sum <- auscpr_long %>% group_by(sample_id, AphiaID) %>% summarize(Total=sum(value))
+    
+    #revert to format of having AphiaID as columns
+    DF_reverted <- DF_sum %>% pivot_wider(names_from = "AphiaID",values_from="Total")
+    abundance_dataframe <- DF_reverted %>% ungroup()
+    
+    #save abundance dataframe
+    abundance_dataframe_filename <- "cpr_auscpr_abundance.csv"
+    write_csv(abundance_dataframe, paste0("data_input/CPR/",abundance_dataframe_filename))
+    print(paste0("Abundance dataframe saved: data_input/CPR/", abundance_dataframe_filename))
+    
+  }
+  
+  #0.2 pre-process Southern Ocean CPR survey
+  preprocess_socpr <- function(socpr_rawfile){
+    #assign sample_id
+    socpr_rawfile <- socpr_rawfile %>% 
+      mutate(survey = "Southern Ocean CPR", sample_id = paste("SOCPR", cur_group_rows(), sep = "")) %>% 
+      relocate(sample_id, .before=Tow_Number) #primary key = Sample_ID 
+    
+    
+    #list metadata content
+    socpr_meta <- c("survey","sample_id","Tow_Number","Ship_Code","Time","Date","Month","Year","Season","Latitude","Longitude","Segment_No.","Segment_Length")
+    #subset metadata
+    df_metadata <- socpr_rawfile %>% 
+      select(all_of(socpr_meta)) %>% 
+      mutate(sampleTime_UTC = as.POSIXct(paste(Date, Time, sep="T"), format = "%d-%b-%YT%H:%M:%S", tz = "UTC")) %>% 
+      rename(c("latitude" = "Latitude", "longitude" = "Longitude"))
+    
+    #save metadata file
+    metadata_filename <- "cpr_socpr_metadata.csv"
+    write_csv(df_metadata, paste0("data_input/CPR/",metadata_filename))
+    print(paste0("Metadata dataframe saved: ", metadata_filename))
+    
+    df_zoop <- socpr_rawfile %>% 
+      select(c("sample_id",!all_of(socpr_meta))) %>% 
+      select(-c("Total abundance","Phytoplankton_Colour_Index","Fluorescence","Salinity","Water_Temperature","Photosynthetically_Active_Radiation")) 
+    
+    #load taxon list
+    socpr_taxonlist <- read_csv("data_input/CPR/CPR_raw_data/socpr_taxonlist.csv", show_col_types = F)
+    
+    #remove unidentified / general taxa
+    unidentified_taxa <- c("Egg indet","Egg mass","Nauplius indet") #socpr-specific list
+    df_noUnid <- df_zoop %>% select(!any_of(unidentified_taxa))
+    
+    #report number of taxon with recognized aphiaID
+    count_recognizedAphiaID <- sum(names(df_noUnid) %in% socpr_taxonlist$taxon, na.rm = T)
+    print(paste0("Taxon with AphiaID: ", count_recognizedAphiaID, " out of ", (length(names(df_noUnid)) - 1)))
+    
+    #rename columns from taxonomic name to AphiaID 
+    #prior step: remove unidentified / general taxa from taxon list 
+    socpr_taxonlist <- socpr_taxonlist %>% 
+      filter(., !(taxon %in% unidentified_taxa)) %>% 
+      filter(., (taxon %in% names(df_noUnid)))
+    ##to select columns with matched AphiaID
+    df_withmatch <- df_noUnid %>% 
+      select(match(socpr_taxonlist$taxon,names(df_noUnid)))
+    #to rename based on the match    
+    names(df_withmatch)[match(names(df_withmatch),socpr_taxonlist$taxon)] <- socpr_taxonlist$aphiaID
+    
+    #combine columns of the same name
+    socpr_long <- df_withmatch %>%  
+      add_column("sample_id" = df_noUnid$sample_id, .name_repair = "minimal") %>% #return sample_id column
+      pivot_longer(cols = !sample_id, names_to = "AphiaID", values_to = "value")
+    
+    #sum up abundance per taxon
+    DF_sum <- socpr_long %>% group_by(sample_id, AphiaID) %>% summarize(Total=sum(value))
+    
+    #revert to format of having AphiaID as columns
+    DF_reverted <- DF_sum %>% pivot_wider(names_from = "AphiaID",values_from="Total")
+    abundance_dataframe <- DF_reverted %>% ungroup()
+    
+    #save abundance dataframe
+    abundance_dataframe_filename <- "cpr_socpr_abundance.csv"
+    write_csv(abundance_dataframe, paste0("data_input/CPR/",abundance_dataframe_filename))
+    print(paste0("Abundance dataframe saved: data_input/CPR/", abundance_dataframe_filename))
+  }
+  
+  #0.3 pre-process MBA data for North Atlantic and North Pacific CPR Surveys
+  preprocess_mba_cpr <- function(mbacpr_rawfile){
+    
+    mbacpr_rawfile <- mbacpr_rawfile %>% 
+      mutate(sampleTime_UTC = as.POSIXct(midpoint_date_gmt, format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),.after = "sample_id") %>% 
+      filter(sampleTime_UTC >= "1997-09-01")
+    #to remove taxa for avoidance of double counting (Richardson et al., 2006)
+    
+    #to separate mba data into north pacific and north atlantic data
+    #identify cpr belonging to North Atlantic and North Pacific CPR
+    mba_npacific <- mbacpr_rawfile %>% 
+      filter(longitude >= 100 | longitude <= -100) %>%
+      mutate(survey = "North Pacific CPR") 
+    
+    mba_natlantic <- mbacpr_rawfile %>% 
+      filter(longitude < 100 & longitude > -100) %>% 
+      mutate(survey = "Atlantic CPR") 
+    
+    #North Atlantic CPR: remove freshwater (Lake Tanganyika)
+    mba_natlantic <- mba_natlantic %>% 
+      filter(!sample_id %in% c("2ALT-1","2ALT-5","3ALT-2","3ALT-5"))
+    
+    mba_meta <- c("survey","sample_id","midpoint_date_gmt","sampleTime_UTC","latitude","longitude","chlorophyll_index")
+    #get metadata
+    mba_npacific_metadata <- mba_npacific %>% 
+      select(all_of(mba_meta)) 
+    
+    #save metadata file
+    npacific_metadata_filename <- "cpr_npacific_metadata.csv"
+    write_csv(mba_npacific_metadata, paste0("data_input/CPR/",npacific_metadata_filename))
+    print(paste0("Metadata dataframe saved: ", npacific_metadata_filename))
+    
+    mba_natlantic_metadata <- mba_natlantic %>% 
+      select(all_of(mba_meta)) 
+    
+    #save metadata file
+    natlantic_metadata_filename <- "cpr_natlantic_metadata.csv"
+    write_csv(mba_natlantic_metadata, paste0("data_input/CPR/",natlantic_metadata_filename))
+    print(paste0("Metadata dataframe saved: ", natlantic_metadata_filename))
+    
+    survey <- c("npacific","natlantic")
+    
+    for(i in 1:2){
+      if(survey[i] == "natlantic"){
+        df_zoop <- mba_natlantic %>% select(c("sample_id",!all_of(mba_meta)))
+      }else if(survey[i] == "npacific"){
+        df_zoop <- mba_npacific %>% select(c("sample_id",!all_of(mba_meta)))
+      }else{ stop("Error in reading dataframe of zooplankton abundance")}
+      
+      print(paste0("CPR survey in-process: ",survey[i]))
+      #load taxon list
+      mba_taxonlist <- read_csv("data_input/CPR/CPR_raw_data/mba_cpr_taxonlist.csv", show_col_types = F)
+      
+      #remove unidentified / general taxa 
+      unidentified_taxa <- c("Egg indet","Egg mass","Nauplius indet") 
+      df_noUnid <- df_zoop %>% select(!any_of(unidentified_taxa))
+      
+      #report number of taxon with recognized aphiaID
+      count_recognizedAphiaID <- sum(names(df_noUnid) %in% mba_taxonlist$taxa_name, na.rm = T)
+      print(paste0("Taxon with AphiaID: ", count_recognizedAphiaID, " out of ", (length(names(df_noUnid)) - 1))) #account for column "sample_id"
+      
+      #rename columns from taxonomic name to AphiaID 
+      #prior step: remove unidentified / general taxa from taxon list 
+      mba_taxonlist <- mba_taxonlist %>% 
+        filter(., !(taxa_name %in% unidentified_taxa)) %>% 
+        filter(., (taxa_name %in% names(df_noUnid)))
+      ##to select columns with matched AphiaID
+      df_withmatch <- df_noUnid %>% 
+        select(match(mba_taxonlist$taxa_name,names(df_noUnid)))
+      #to rename based on the match    
+      names(df_withmatch)[match(names(df_withmatch),mba_taxonlist$taxa_name)] <- mba_taxonlist$aphia_id
+      
+      # #return "sample_id" column
+      # abundance_dataframe <- df_withmatch %>% 
+      #   add_column("sample_id" = df_noUnid$sample_id, .before = 1, .name_repair = "minimal") 
+      
+      #combine columns of the same name
+      mbacpr_long <- df_withmatch %>%  
+        add_column("sample_id" = df_noUnid$sample_id, .name_repair = "minimal") %>% #return sample_id column
+        pivot_longer(cols = !sample_id, names_to = "AphiaID", values_to = "value")
+      
+      #sum up abundance per taxon
+      DF_sum <- mbacpr_long %>% group_by(sample_id, AphiaID) %>% summarize(Total=sum(value))
+      
+      #revert to format of having AphiaID as columns
+      DF_reverted <- DF_sum %>% pivot_wider(names_from = "AphiaID",values_from="Total")
+      abundance_dataframe <- DF_reverted %>% ungroup()
+      
+      #save abundance dataframe
+      abundance_dataframe_filename <- paste0("cpr_",survey[i],"_abundance.csv")
+      write_csv(abundance_dataframe, paste0("data_input/CPR/",abundance_dataframe_filename))
+      print(paste0("Abundance dataframe saved: data_input/CPR/", abundance_dataframe_filename))
+      
+    }
+  } 
+  
+  #0.4 to map the global CPR
+  map_globalcpr <- function(file.list){
+    #extract metadata  
+    filenames <- basename(file.list)
+    cpr <- data.frame(matrix(ncol=5,nrow=0, dimnames=list(NULL, c("survey", "sample_id", "latitude", "longitude", "sampleTime_UTC"))))
+    cpr[,1:2] <- lapply(cpr[,1:2], as.character) # survey and sample id
+    cpr[,3:4] <- lapply(cpr[,3:4], as.double) # latitude and longitude
+    cpr[,5] <- as.POSIXct(cpr[,5]) #sample time UTC
+    
+    
+    #loop through each survey
+    for(i in 1:length(filenames)){
+      file_survey <- str_extract(filenames[i], "(?<=_)[^_]+")
+      print(paste("Survey: ",file_survey, sep=""))
+      
+      cpr_metadata <- read_csv(file.list[i], show_col_types = F) %>% 
+        mutate(survey = file_survey) %>% 
+        select("survey","sample_id","latitude","longitude","sampleTime_UTC")
+      
+      print(paste("File No.", i, sep=""))
+      #integrate into a global cpr
+      cpr <- cpr %>% 
+        rows_insert(cpr_metadata, by = "survey")
+    }
+    
+    #identify coordinates 
+    cpr <- cpr %>% 
+      st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>% 
+      rename("Survey" = "survey") 
+    
+    #set projection 
+    world_projection <- '+proj=eqearth +lon_0=0 +datum=WGS84 +units=m +no_defs'
+    #get world coastline
+    world <- ne_coastline(scale = "medium")
+    
+    #to plot
+    globalcpr_map <- tm_shape(world) +
+      tm_polygons(col = "white") +
+      tm_shape(cpr, crs = world_projection, raster.warp = TRUE) +
+      tm_dots(col = "Survey", fill_alpha = 0.5, size = 0.3,
+              labels = c("Australian CPR", "Atlantic CPR", "North Pacific CPR", "SCAR Southern Ocean CPR")) + 
+      tm_graticules(alpha = 0.5, 
+                    x = c(-180, -150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150, 180), 
+                    y = c(-90, -60, -30, 0, 30, 60, 90), 
+                    labels.size = 1) +
+      tm_legend(position = c("left", "center"),
+                text.size = 1.2, title.size = 1.4, na.show = F)
+    
+    #to export plot
+    tmap_save(globalcpr_map, filename=paste0("output/plots/Global-CPR-map_",date,".png"),
+              width = 400,
+              height = 200,
+              units = "mm",
+              dpi = 400)
+  }
+  
 ########################################### 1_generate_traits ###################################################
   
   #1.1 Integrate Pata & Hunt (2023) assigned trait value to species list
@@ -92,35 +377,35 @@
   
   #fTraitTable <- read_csv("output/df/fTraitTable.csv")
   
-  # #1.4 check for duplicates 
-  # detect_duplicateAssignedTrait <- function(species_list){
-  #   
-  #   #check which have duplicated 'traitValues'
-  #   if(anyDuplicated(species.list$aphiaID) > 0){
-  #   cat("Need for review!\nDetected duplicate in assigned trait values for: ")
-  #   print(unique(species.list$scientificName[duplicated(species.list$aphiaID)]))
-  #   }else if(anyDuplicated(species.list$aphiaID) == 0){
-  #   cat("Looks good!\nNo detected duplicates")
-  #   }else{ stop("Error in duplicate checking", call. = FALSE)}
-  #   
-  # }
-  
-  # #1.4 compare previous and current trait table 
-  # compare_traitTables <- function(){
-  #   reviewed_TraitTable <- read_csv(paste0("data_input/traits/fTraitTable.csv"))
-  #   newTraitTable <- read_csv(paste0("output/df/TG_trait-table-",date,".csv"))
-  #   
-  #   comparison_tibble <- reviewed_TraitTable %>% 
-  #     select(c("aphiaID","scientificName","taxon","TG_latest")) %>% 
-  #     rename("TG_previousTraitTable" = "TG_latest") %>% 
-  #     full_join(newTraitTable %>% select(c("aphiaID","taxa_name","traitValue")), by = c("aphiaID")) %>% 
-  #     rename("TG_newTraitTable" = "traitValue")
-  #   
-  #   view(comparison_tibble)
-  #   
-  #   write_csv(comparison_tibble, "output/df/TraitTable_comparison.csv")
-  #   print(paste0("File output: df/TraitTable_comparison.csv"))
-  # }
+  #1.4 check for duplicates
+  detect_duplicateAssignedTrait <- function(taxa_list){
+
+    #check which have duplicated 'traitValues'
+    if(anyDuplicated(taxa_list$aphiaID) > 0){
+    cat("Need for review!\nDetected duplicate in assigned trait values for: ")
+    print(unique(taxa_list$scientificName[duplicated(taxa_list$aphiaID)]))
+    }else if(anyDuplicated(taxa_list$aphiaID) == 0){
+    cat("Looks good!\nNo detected duplicates")
+    }else{ stop("Error in duplicate checking", call. = FALSE)}
+
+  }
+
+  #1.5 compare previous and current trait table
+  compare_traitTables <- function(){
+    reviewed_TraitTable <- read_csv(paste0("data_input/traits/fTraitTable.csv"))
+    newTraitTable <- read_csv(paste0("output/df/TG_trait-table-",date,".csv"))
+
+    comparison_tibble <- reviewed_TraitTable %>%
+      select(c("aphiaID","scientificName","taxon","TG_latest")) %>%
+      rename("TG_previousTraitTable" = "TG_latest") %>%
+      full_join(newTraitTable %>% select(c("aphiaID","taxa_name","traitValue")), by = c("aphiaID")) %>%
+      rename("TG_newTraitTable" = "traitValue")
+
+    view(comparison_tibble)
+
+    write_csv(comparison_tibble, "output/df/TraitTable_comparison.csv")
+    print(paste0("File output: df/TraitTable_comparison.csv"))
+  }
   
   ## See '1_generate_traits' script for full preparation of trait table.
   

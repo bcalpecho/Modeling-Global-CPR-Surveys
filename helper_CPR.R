@@ -470,7 +470,7 @@ map_globalcpr <- function(file.list){
                 text.size = 1.2, title.size = 1.4)
     
     #to export plot
-    tmap_save(globalcpr_map, filename=paste("Output/map/Global/Global-CPR-map_",date,".png",sep=""),
+    tmap_save(globalcpr_map, filename=paste0("output/plots/Global-CPR-map_",date,".png"),
               width = 400,
               height = 200,
               units = "mm",
