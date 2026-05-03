@@ -10,7 +10,7 @@
   output_dir <- "output/" # where files are written to
   
   #### set date and list of models for version control and coverage of CPR surveys
-  date <- "08042026"
+  date <- "13042026"
   survey_list <- c("auscpr", "socpr","npacific","natlantic")
 
 ########## Pre-process raw CPR data #########
@@ -96,19 +96,18 @@
 
   # 4.1 Import data
     #for omnivores and carnivores
-    df <- read_rds(paste0("data_input/global_df_complete_",date,".rds"))
-    #for filter-feeders
-    #df_filter <- read_rds(paste0("data_input/global_df_complete_Filter_",date,".rds"))
-  
-  # 4.2 Selected models (see '4_model_globalCPR' script for competing models)
+    df_date <- "13042026"
+    df <- read_rds(paste0("data_input/global_df_complete_",df_date,".rds"))
+    
+  # 4.2 Selected models (see '4_model_globalCPR' script for competing models)  + survey
+    Carni_mdl_zib <- glmmTMB(RCO_SVT_zib ~ chla_sqrt + survey + (1 + tow_days | survey: tow_no) + (1 | longhurst), 
+                               ziformula = ~1,
+                             data = df, family = beta_family(link = "logit"))
+    
     Omni_mdl_zib <- glmmTMB(ROC_SVT_zib ~ chla_sqrt + survey + (1 + tow_days | survey: tow_no) + (1 | longhurst), 
                             ziformula = ~1,
                             data = df, family = beta_family(link = "logit"))
-    
-    Carni_mdl_zib <- glmmTMB(RCO_SVT_zib ~ chla_sqrt + survey + (1 + tow_days | survey: tow_no) + (1 | longhurst), 
-                             ziformula = ~1,
-                             data = df, family = beta_family(link = "logit"))
-    
+
     Filter_mdl_zib <- glmmTMB(RFF_SVT_zib ~ chla_sqrt + survey + (1 + tow_days | survey: tow_no) + (1 | longhurst), 
                               ziformula = ~1,
                               data = df, family = beta_family(link = "logit"))
@@ -118,19 +117,19 @@
     names(mdl_list) <- c("Carni","Omni","Filter")
     
   # Model summary
-    summary(Omni_mdl_zib)
     summary(Carni_mdl_zib)
+    summary(Omni_mdl_zib)
     summary(Filter_mdl_zib)
     
   # 4.3 to summarize the coefficients of the models
      #determine R^2 (coefficient of determination)
-      Omni_mdl_zib_R2 <- MuMIn::r.squaredGLMM(Omni_mdl_zib)
       Carni_mdl_zib_R2 <- MuMIn::r.squaredGLMM(Carni_mdl_zib)
+      Omni_mdl_zib_R2 <- MuMIn::r.squaredGLMM(Omni_mdl_zib)
       Filter_mdl_zib_R2 <- MuMIn::r.squaredGLMM(Filter_mdl_zib)
     
      #extract coefficients
-      Omni_mdl_zib_coeff <- summary(Omni_mdl_zib)$coefficients$cond %>% as.data.frame()
       Carni_mdl_zib_coeff<- summary(Carni_mdl_zib)$coefficients$cond %>% as.data.frame()
+      Omni_mdl_zib_coeff <- summary(Omni_mdl_zib)$coefficients$cond %>% as.data.frame()
       Filter_mdl_zib_coeff <- summary(Filter_mdl_zib)$coefficients$cond %>% as.data.frame()
     
     #to summarize the estimated proportions of zooplankton trophic groups with Chl-a as a predictor
@@ -146,8 +145,10 @@
     summary_predictionsPerSurvey(mdl_list)
     
    # 4.5 to save/export selected models
-    {for(i in length(mdl_list)){
-      write_rds(mdl_list[[i]], paste0("output/mdls/",names(mdl_list[i]),"_mdl_zib.rds"))
+    {for(i in 1:length(mdl_list)){
+      mdl_name <- paste0(names(mdl_list[i]),"_mdl_zib")
+      write_rds(mdl_list[[i]], paste0("output/mdls/",mdl_name,".rds"))
+      print(paste0("Model saved: ", mdl_name))
     }
     remove(i)}
 
@@ -160,7 +161,7 @@
   #5.1 quantile-quantile plot to assess normality of residuals
     plot_QQ(mdl_list)
     
-  #5.2 mean variance plot to assess homogeneity of variance
+   #5.2 mean variance plot to assess homogeneity of variance
     plot_meanVariance(mdl_list)
     
   #5.3 to plot the intercepts of Longhurst Provinces
@@ -174,11 +175,8 @@
   
 ########## 6b Predict Global CPR ##########
   
-  #6. Compute change in proportion of zooplankton trophic groups per unit of Chl-a decline
-    
-    
   #6b.1 to predict zooplankton trophic group 
-    #load ensemble
+    #load ensemble 
     ensembles_median <- list.files(file.path("data_input","ensemble_chlos","median","chlos"), full.names = TRUE)
     
     #process the SSP scenarios one-by-one (One ensemble each SSP scenario)
@@ -204,14 +202,17 @@
     baseline_stats_TG(mdl_list)
   
 ########## 7 Plot visual summary of model ##########
-  
-  #7.1 summary for model of omnivores
-    plot_model_summary_omnivores(date)
     
-  #7.2 summary for model of carnivores
+  #7.1 summary for model of carnivores
     plot_model_summary_carnivores(date)
   
+  #7.2 summary for model of omnivores 
+    plot_model_summary_omnivores(date)
+    
   #7.3 summary for model of gelatinous filter-feeders
     plot_model_summary_filterfeeders(date)
   
+  #7.4 to plot the model estimates per survey in response scale 
+    plot_model_perSurvey_responseScale(date)
+
 ## End ##

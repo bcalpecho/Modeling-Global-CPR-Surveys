@@ -49,10 +49,10 @@
   
 ## Exploratory data analysis
   # Look at spearman correlations and distributions
-    ggpairs_plot <- GGally::ggpairs(df, columns = c("ROC","RCO","RFF","chla","chla_sqrt"), progress = FALSE, 
+    ggpairs_plot <- GGally::ggpairs(df, columns = c("RCO","ROC","RFF","chla","chla_sqrt"), progress = FALSE, 
                                     upper = list(continuous = GGally::wrap("cor", method = "spearman", stars = FALSE)),
-                                    columnLabels = c("Relative abundance of\nomnivores","Relative abundance of\ncarnivores","Relative abundance of\ngelatinous filter-feeders","Chlorophyll-a","Sqrt-transformed\nchlorophyll-a"))
-    ggsave(paste("Output/data/distributions/ggally-",date,".png",sep=""), plot = ggpairs_plot, 
+                                    columnLabels = c("Relative abundance of\ncarnivores","Relative abundance of\nomnivores","Relative abundance of\ngelatinous filter-feeders","Chlorophyll-a","Sqrt-transformed\nchlorophyll-a"))
+    ggsave(paste("output/plots/ggally-",date,".png",sep=""), plot = ggpairs_plot, 
            width = 8, height = 8, dpi = 300)
     
 # Run competing models 

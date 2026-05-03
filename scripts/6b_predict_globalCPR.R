@@ -20,9 +20,7 @@
   #load ensemble
     var <- "chlos"
     base_dir <- "./hotrstuff/" 
-    #ensembles_mean <- list.files(file.path(base_dir, "data", "proc", "ensemble", "mean", var), full.names = TRUE)
     ensembles_median <- list.files(file.path(base_dir, "data", "proc", "ensemble", "median", var), full.names = TRUE)
-    
     #process the SSP scenarios one-by-one (One ensemble each SSP scenario)
 
   #load zooplankton GLMs
