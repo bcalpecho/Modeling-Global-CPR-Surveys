@@ -10,7 +10,7 @@
   output_dir <- "output/" # where files are written to
   
   #### set date and list of models for version control and coverage of CPR surveys
-  date <- "13042026"
+  date <- "04052026"
   survey_list <- c("auscpr", "socpr","npacific","natlantic")
 
 ########## Pre-process raw CPR data #########
@@ -86,7 +86,7 @@
   #3.2 Compute for proportions of zooplankton trophic groups
     compute_proportions_perSurvey(file.list) 
   
-  #3.3 Combining variables altogether into a dataframe for each CPR survey
+  #3.3 Combine variables altogether into a dataframe for each CPR survey
     generate_df_perSurvey(date)
   
   #3.4 generate GLOBAL dataframe and compute for ratios
@@ -153,10 +153,10 @@
     remove(i)}
 
 ########## 5 Assess the Model ##########
-  #to load back the models
-    Carni_mdl_zib <- read_rds("output/mdls/Carni_mdl_zib.rds")
-    Omni_mdl_zib <- read_rds("output/mdls/Omni_mdl_zib.rds")
-    Filter_mdl_zib <- read_rds("output/mdls/Filter_mdl_zib.rds")
+  # #to load back the models
+  #   Carni_mdl_zib <- read_rds("output/mdls/Carni_mdl_zib.rds")
+  #   Omni_mdl_zib <- read_rds("output/mdls/Omni_mdl_zib.rds")
+  #   Filter_mdl_zib <- read_rds("output/mdls/Filter_mdl_zib.rds")
     
   #5.1 quantile-quantile plot to assess normality of residuals
     plot_QQ(mdl_list)
@@ -176,7 +176,7 @@
 ########## 6b Predict Global CPR ##########
   
   #6b.1 to predict zooplankton trophic group 
-    #load ensemble 
+    #load ensemble of chlos (surface chlorophyll-a) projections from ten CMIP6 ESMs
     ensembles_median <- list.files(file.path("data_input","ensemble_chlos","median","chlos"), full.names = TRUE)
     
     #process the SSP scenarios one-by-one (One ensemble each SSP scenario)
